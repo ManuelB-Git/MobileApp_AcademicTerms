@@ -1,0 +1,145 @@
+@page "/terms/{TermId:int}/courses/add"
+@page "/courses/edit/{Id:int}"
+@using MobileApp_AcademicTerms.Models
+@using MobileApp_AcademicTerms.Services
+@inject DatabaseService DatabaseService
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<h1>@pageTitle</h1>
+
+<EditForm Model="@course" OnValidSubmit="SaveCourse">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label for="title" class="form-label">Title</label>
+        <InputText id="title" @bind-Value="course.Title" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="startDate" class="form-label">Start Date</label>
+        <InputDate id="startDate" @bind-Value="course.StartDate" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="endDate" class="form-label">End Date</label>
+        <InputDate id="endDate" @bind-Value="course.EndDate" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="status" class="form-label">Status</label>
+        <InputSelect id="status" @bind-Value="course.Status" class="form-control">
+            <option value="Planned">Planned</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="Dropped">Dropped</option>
+        </InputSelect>
+    </div>
+    
+    <div class="mb-3">
+        <label for="instructorName" class="form-label">Instructor Name</label>
+        <InputText id="instructorName" @bind-Value="course.InstructorName" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="instructorPhone" class="form-label">Instructor Phone</label>
+        <InputText id="instructorPhone" @bind-Value="course.InstructorPhone" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="instructorEmail" class="form-label">Instructor Email</label>
+        <InputText id="instructorEmail" @bind-Value="course.InstructorEmail" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="notes" class="form-label">Notes</label>
+        <InputTextArea id="notes" @bind-Value="course.Notes" class="form-control" rows="3" />
+    </div>
+    
+    <div class="form-check mb-3">
+        <InputCheckbox id="notificationsEnabled" @bind-Value="course.NotificationsEnabled" class="form-check-input" />
+        <label class="form-check-label" for="notificationsEnabled">
+            Enable Notifications for Start/End Dates
+        </label>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="button" class="btn btn-secondary" @onclick="GoBack">Cancel</button>
+</EditForm>
+
+@code {
+    [Parameter]
+    public int Id { get; set; } = 0;
+    
+    [Parameter]
+    public int TermId { get; set; } = 0;
+
+    private Course course = new Course();
+    private string pageTitle = "Add Course";
+    private int actualTermId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id != 0)
+        {
+            // Editing an existing course
+            pageTitle = "Edit Course";
+            course = await DatabaseService.GetCourseAsync(Id);
+            
+            if (course == null)
+            {
+                course = new Course();
+                NavigationManager.NavigateTo("/terms");
+                return;
+            }
+            
+            actualTermId = course.TermId;
+        }
+        else
+        {
+            // Adding a new course for a specific term
+            course = new Course
+            {
+                TermId = TermId,
+                StartDate = DateTime.Today,
+                EndDate = DateTime.Today.AddMonths(1),
+                Status = "Planned",
+                NotificationsEnabled = false
+            };
+            
+            actualTermId = TermId;
+        }
+    }
+
+    private async Task SaveCourse()
+    {
+        if (course.EndDate < course.StartDate)
+        {
+            // Handle validation error: End date cannot be before start date
+            return;
+        }
+
+        await DatabaseService.SaveCourseAsync(course);
+        
+        // Schedule notifications if enabled
+        if (course.NotificationsEnabled)
+        {
+            await NotificationService.ScheduleCourseNotifications(course);
+        }
+        
+        NavigationManager.NavigateTo($"/terms/{actualTermId}/courses");
+    }
+
+    private void GoBack()
+    {
+        if (Id != 0)
+        {
+            NavigationManager.NavigateTo($"/terms/{actualTermId}/courses");
+        }
+        else
+        {
+            NavigationManager.NavigateTo($"/terms/{TermId}/courses");
+        }
+    }
+}

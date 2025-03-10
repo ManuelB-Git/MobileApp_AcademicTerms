@@ -1,0 +1,79 @@
+@page "/terms/add"
+@page "/terms/edit/{Id:int}"
+@using MobileApp_AcademicTerms.Models
+@using MobileApp_AcademicTerms.Services
+@inject DatabaseService DatabaseService
+@inject NavigationManager NavigationManager
+
+<h1>@pageTitle</h1>
+
+<EditForm Model="@term" OnValidSubmit="SaveTerm">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label for="title" class="form-label">Title</label>
+        <InputText id="title" @bind-Value="term.Title" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="startDate" class="form-label">Start Date</label>
+        <InputDate id="startDate" @bind-Value="term.StartDate" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="endDate" class="form-label">End Date</label>
+        <InputDate id="endDate" @bind-Value="term.EndDate" class="form-control" />
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="button" class="btn btn-secondary" @onclick="GoBack">Cancel</button>
+</EditForm>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Term term = new Term();
+    private string pageTitle = "Add Term";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id != 0)
+        {
+            pageTitle = "Edit Term";
+            term = await DatabaseService.GetTermAsync(Id);
+            
+            if (term == null)
+            {
+                term = new Term();
+                NavigationManager.NavigateTo("/terms");
+            }
+        }
+        else
+        {
+            term = new Term
+            {
+                StartDate = DateTime.Today,
+                EndDate = DateTime.Today.AddMonths(3)
+            };
+        }
+    }
+
+    private async Task SaveTerm()
+    {
+        if (term.EndDate < term.StartDate)
+        {
+           
+            return;
+        }
+
+        await DatabaseService.SaveTermAsync(term);
+        NavigationManager.NavigateTo("/terms");
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/terms");
+    }
+}

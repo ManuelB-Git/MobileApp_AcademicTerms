@@ -1,0 +1,148 @@
+@page "/reports"
+@using MobileApp_AcademicTerms.Models
+@using MobileApp_AcademicTerms.Services
+@inject DatabaseService DbService
+@inject SearchService SearchService
+
+<h3>Reports & Search</h3>
+
+<div class="search-section mb-4">
+    <div class="input-group">
+        <input type="text" class="form-control" @bind="searchQuery" @bind:event="oninput" placeholder="Search terms, courses, or assessments...">
+        <button class="btn btn-primary" @onclick="PerformSearch">Search</button>
+    </div>
+</div>
+
+@if (searchResults.Terms.Any() || searchResults.Courses.Any() || searchResults.Assessments.Any())
+{
+        <div class="search-results mb-4">
+        @if (searchResults.Terms.Any())
+        {
+                    <h4>Terms</h4>
+                    <ul class="list-group mb-3">
+                @foreach (var term in searchResults.Terms)
+                {
+                                <li class="list-group-item">
+                                    <a href="/terms/@term.Id/courses">@term.Title</a>
+                                </li>
+                }
+                    </ul>
+        }
+
+        @if (searchResults.Courses.Any())
+        {
+                    <h4>Courses</h4>
+                    <ul class="list-group mb-3">
+                @foreach (var course in searchResults.Courses)
+                {
+                                <li class="list-group-item">
+                                    <a href="/courses/@course.Id">@course.Title</a>
+                                </li>
+                }
+                    </ul>
+        }
+
+        @if (searchResults.Assessments.Any())
+        {
+                    <h4>Assessments</h4>
+                    <ul class="list-group mb-3">
+                @foreach (var assessment in searchResults.Assessments)
+                {
+                                <li class="list-group-item">
+                        @assessment.Title
+                                </li>
+                }
+                    </ul>
+        }
+        </div>
+}
+
+
+
+
+<div class="statistics-section">
+    <h4>Statistics</h4>
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Terms</h5>
+                    <p class="card-text">Total: @statistics.TotalTerms</p>
+                    <p class="card-text">Active: @statistics.ActiveTerms</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Courses</h5>
+                    <p class="card-text">Total: @statistics.TotalCourses</p>
+                    <p class="card-text">In Progress: @statistics.ActiveCourses</p>
+                    <p class="card-text">Completed: @statistics.CompletedCourses</p>
+                </div>
+            </div>
+        </div>
+        <div the="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Assessments</h5>
+                    <p class="card-text">Total: @statistics.TotalAssessments</p>
+                    <p class="card-text">Upcoming: @statistics.UpcomingAssessments</p>
+                    <p class="card-text">Completed: @statistics.CompletedAssessments</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string searchQuery = "";
+    private (List<Term> Terms, List<Course> Courses, List<Assessment> Assessments) searchResults
+        = (new List<Term>(), new List<Course>(), new List<Assessment>());
+    private Statistics statistics = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatistics();
+    }
+
+    private async Task PerformSearch()
+    {
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            searchResults = await SearchService.Search(searchQuery);
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        var now = DateTime.Now;
+        var terms = await DbService.GetTermsAsync();
+        var courses = await DbService.GetCoursesAsync();
+        var assessments = await DbService.GetAssessmentsAsync();
+
+        statistics = new Statistics
+            {
+                TotalTerms = terms.Count,
+                ActiveTerms = terms.Count(t => t.StartDate <= now && t.EndDate >= now),
+                TotalCourses = courses.Count,
+                ActiveCourses = courses.Count(c => c.StartDate <= now && c.EndDate >= now),
+                CompletedCourses = courses.Count(c => c.EndDate < now),
+                TotalAssessments = assessments.Count,
+                UpcomingAssessments = assessments.Count(a => a.StartDate > now),
+                CompletedAssessments = assessments.Count(a => a.EndDate < now)
+            };
+    }
+
+    private class Statistics
+    {
+        public int TotalTerms { get; set; }
+        public int ActiveTerms { get; set; }
+        public int TotalCourses { get; set; }
+        public int ActiveCourses { get; set; }
+        public int CompletedCourses { get; set; }
+        public int TotalAssessments { get; set; }
+        public int UpcomingAssessments { get; set; }
+        public int CompletedAssessments { get; set; }
+    }
+}

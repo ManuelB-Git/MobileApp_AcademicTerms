@@ -1,0 +1,130 @@
+@page "/courses/{CourseId:int}/assessments/add"
+@page "/assessments/edit/{Id:int}"
+@using MobileApp_AcademicTerms.Models
+@using MobileApp_AcademicTerms.Services
+@inject DatabaseService DatabaseService
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+@inject IJSRuntime JSRuntime
+
+<h1>@pageTitle</h1>
+
+<EditForm Model="@assessment" OnValidSubmit="SaveAssessment">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label for="title" class="form-label">Title</label>
+        <InputText id="title" @bind-Value="assessment.Title" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="type" class="form-label">Assessment Type</label>
+        <InputSelect id="type" @bind-Value="assessment.Type" class="form-control">
+            <option value="Objective">Objective</option>
+            <option value="Performance">Performance</option>
+        </InputSelect>
+    </div>
+    
+    <div class="mb-3">
+        <label for="startDate" class="form-label">Start Date</label>
+        <InputDate id="startDate" @bind-Value="assessment.StartDate" class="form-control" />
+    </div>
+    
+    <div class="mb-3">
+        <label for="endDate" class="form-label">End Date</label>
+        <InputDate id="endDate" @bind-Value="assessment.EndDate" class="form-control" />
+    </div>
+    
+    <div class="form-check mb-3">
+        <InputCheckbox id="notificationsEnabled" @bind-Value="assessment.NotificationsEnabled" class="form-check-input" />
+        <label class="form-check-label" for="notificationsEnabled">
+            Enable Notifications for Start/End Dates
+        </label>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="button" class="btn btn-secondary" @onclick="GoBack">Cancel</button>
+</EditForm>
+
+@code {
+    [Parameter]
+    public int Id { get; set; } = 0;
+    
+    [Parameter]
+    public int CourseId { get; set; } = 0;
+
+    private Assessment assessment = new Assessment();
+    private string pageTitle = "Add Assessment";
+    private int actualCourseId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id != 0)
+        {
+            // Editing an existing assessment
+            pageTitle = "Edit Assessment";
+            assessment = await DatabaseService.GetAssessmentAsync(Id);
+            
+            if (assessment == null)
+            {
+                assessment = new Assessment();
+                NavigationManager.NavigateTo("/terms");
+                return;
+            }
+            
+            actualCourseId = assessment.CourseId;
+        }
+        else
+        {
+            // Adding a new assessment for a specific course
+            assessment = new Assessment
+            {
+                CourseId = CourseId,
+                StartDate = DateTime.Today,
+                EndDate = DateTime.Today.AddDays(7),
+                Type = "Objective",  // Default type
+                NotificationsEnabled = false
+            };
+            
+            actualCourseId = CourseId;
+        }
+    }
+
+    private async Task SaveAssessment()
+    {
+        if (assessment.EndDate < assessment.StartDate)
+        {
+            // Handle validation error: End date cannot be before start date
+            return;
+        }
+
+        // Validate that there's not already an assessment of the same type for this course
+        var assessments = await DatabaseService.GetAssessmentsForCourseAsync(actualCourseId);
+        var existingAssessmentOfSameType = assessments
+            .Where(a => a.Id != assessment.Id && a.Type == assessment.Type)
+            .FirstOrDefault();
+            
+        if (existingAssessmentOfSameType != null)
+        {
+            // Handle validation error: Only one assessment of each type allowed per course
+            await JSRuntime.InvokeVoidAsync("alert", $"A {assessment.Type} assessment already exists for this course.");
+            return;
+        }
+
+        await DatabaseService.SaveAssessmentAsync(assessment);
+        
+        // Schedule notifications if enabled
+        if (assessment.NotificationsEnabled)
+        {
+            await NotificationService.ScheduleAssessmentNotifications(assessment);
+        }
+        
+        NavigationManager.NavigateTo($"/courses/{actualCourseId}");
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo($"/courses/{actualCourseId}");
+    }
+}

@@ -1,0 +1,121 @@
+@page "/terms/{TermId:int}/courses"
+@using MobileApp_AcademicTerms.Models
+@using MobileApp_AcademicTerms.Services
+@inject DatabaseService DatabaseService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<h1>Courses for @termTitle</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="() => NavigateToCourseEdit(0)">Add New Course</button>
+    <button class="btn btn-secondary ms-2" @onclick="GoBackToTerms">Back to Terms</button>
+</div>
+
+@if (courses == null || term == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!courses.Any())
+{
+    <div class="alert alert-info">
+        <p>No courses have been added to this term yet.</p>
+    </div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var course in courses)
+        {
+            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                <div @onclick="() => NavigateToCourseDetails(course.Id)" style="cursor:pointer; flex: 1;">
+                    <h5 class="mb-1">@course.Title</h5>
+                    <small>@course.StartDate.ToShortDateString() - @course.EndDate.ToShortDateString()</small>
+                    <div>
+                        <span class="badge bg-@GetStatusBadgeColor(course.Status)">@course.Status</span>
+                    </div>
+                </div>
+                <div>
+                    <button class="btn btn-outline-primary me-2" @onclick="() => NavigateToCourseEdit(course.Id)">Edit</button>
+                    <button class="btn btn-outline-danger" @onclick="() => DeleteCourse(course)">Delete</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int TermId { get; set; }
+
+    private List<Course>? courses;
+    private Term? term;
+    private string termTitle = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTerm();
+        await LoadCourses();
+    }
+
+    private async Task LoadTerm()
+    {
+        term = await DatabaseService.GetTermAsync(TermId);
+        if (term != null)
+        {
+            termTitle = term.Title;
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/terms");
+        }
+    }
+
+    private async Task LoadCourses()
+    {
+        courses = await DatabaseService.GetCoursesForTermAsync(TermId);
+    }
+
+    private void NavigateToCourseDetails(int courseId)
+    {
+        NavigationManager.NavigateTo($"/courses/{courseId}");
+    }
+
+    private void NavigateToCourseEdit(int courseId)
+    {
+        if (courseId == 0)
+        {
+            NavigationManager.NavigateTo($"/terms/{TermId}/courses/add");
+        }
+        else
+        {
+            NavigationManager.NavigateTo($"/courses/edit/{courseId}");
+        }
+    }
+
+    private async Task DeleteCourse(Course course)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete the course '{course.Title}'?"))
+        {
+            await DatabaseService.DeleteCourseAsync(course);
+            await LoadCourses();
+        }
+    }
+
+    private string GetStatusBadgeColor(string status)
+    {
+        return status?.ToLower() switch
+        {
+            "in progress" => "primary",
+            "completed" => "success",
+            "dropped" => "danger",
+            "planned" => "warning",
+            _ => "secondary"
+        };
+    }
+
+    private void GoBackToTerms()
+    {
+        NavigationManager.NavigateTo("/terms");
+    }
+}
