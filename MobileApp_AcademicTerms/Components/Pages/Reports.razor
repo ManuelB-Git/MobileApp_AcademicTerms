@@ -1,8 +1,10 @@
 @page "/reports"
 @using MobileApp_AcademicTerms.Models
 @using MobileApp_AcademicTerms.Services
+@using System.Text
 @inject DatabaseService DbService
 @inject SearchService SearchService
+@inject IJSRuntime JSRuntime
 
 <h3>Reports & Search</h3>
 
@@ -15,50 +17,109 @@
 
 @if (searchResults.Terms.Any() || searchResults.Courses.Any() || searchResults.Assessments.Any())
 {
-        <div class="search-results mb-4">
+    <div class="search-results mb-4">
         @if (searchResults.Terms.Any())
         {
-                    <h4>Terms</h4>
-                    <ul class="list-group mb-3">
+            <h4>Terms</h4>
+            <ul class="list-group mb-3">
                 @foreach (var term in searchResults.Terms)
                 {
-                                <li class="list-group-item">
-                                    <a href="/terms/@term.Id/courses">@term.Title</a>
-                                </li>
+                    <li class="list-group-item">
+                        <a href="/terms/@term.Id/courses">@term.Title</a>
+                    </li>
                 }
-                    </ul>
+            </ul>
         }
 
         @if (searchResults.Courses.Any())
         {
-                    <h4>Courses</h4>
-                    <ul class="list-group mb-3">
+            <h4>Courses</h4>
+            <ul class="list-group mb-3">
                 @foreach (var course in searchResults.Courses)
                 {
-                                <li class="list-group-item">
-                                    <a href="/courses/@course.Id">@course.Title</a>
-                                </li>
+                    <li class="list-group-item">
+                        <a href="/courses/@course.Id">@course.Title</a>
+                    </li>
                 }
-                    </ul>
+            </ul>
         }
 
         @if (searchResults.Assessments.Any())
         {
-                    <h4>Assessments</h4>
-                    <ul class="list-group mb-3">
+            <h4>Assessments</h4>
+            <ul class="list-group mb-3">
                 @foreach (var assessment in searchResults.Assessments)
                 {
-                                <li class="list-group-item">
+                    <li class="list-group-item">
                         @assessment.Title
-                                </li>
+                    </li>
                 }
-                    </ul>
+            </ul>
         }
-        </div>
+    </div>
 }
 
+<!-- Report Generation Section -->
+<div class="report-section mb-4">
+    <h4>Generate Reports</h4>
+    <div class="card">
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="reportType" class="form-label">Report Type</label>
+                <select id="reportType" class="form-select" @bind="selectedReportType">
+                    <option value="terms">Terms Summary</option>
+                    <option value="courses">Courses by Term</option>
+                    <option value="assessments">Upcoming Assessments</option>
+                    <option value="status">Course Status Report</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="reportTitle" class="form-label">Report Title</label>
+                <input type="text" class="form-control" id="reportTitle" @bind="reportTitle" placeholder="Enter report title">
+            </div>
+            <button class="btn btn-success" @onclick="GenerateReport">Generate Report</button>
+        </div>
+    </div>
+</div>
 
-
+@if (showReport)
+{
+    <div class="report-output mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">@reportTitle</h5>
+                <div>
+                    <span class="text-muted">Generated: @reportDateTime.ToString("MMM dd, yyyy HH:mm:ss")</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                @foreach (var header in reportHeaders)
+                                {
+                                    <th>@header</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in reportRows)
+                            {
+                                <tr>
+                                    @foreach (var cell in row)
+                                    {
+                                        <td>@cell</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 <div class="statistics-section">
     <h4>Statistics</h4>
@@ -82,7 +143,7 @@
                 </div>
             </div>
         </div>
-        <div the="col-md-4 mb-3">
+        <div class="col-md-4 mb-3">
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Assessments</h5>
@@ -100,6 +161,14 @@
     private (List<Term> Terms, List<Course> Courses, List<Assessment> Assessments) searchResults
         = (new List<Term>(), new List<Course>(), new List<Assessment>());
     private Statistics statistics = new();
+
+    // Report generation properties
+    private string selectedReportType = "terms";
+    private string reportTitle = "";
+    private bool showReport = false;
+    private DateTime reportDateTime;
+    private List<string> reportHeaders = new();
+    private List<List<string>> reportRows = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -133,6 +202,128 @@
                 CompletedAssessments = assessments.Count(a => a.EndDate < now)
             };
     }
+
+    private async Task GenerateReport()
+    {
+        if (string.IsNullOrWhiteSpace(reportTitle))
+        {
+            reportTitle = $"{selectedReportType.ToUpper()} Report";
+        }
+
+        reportDateTime = DateTime.Now;
+        showReport = true;
+
+        switch (selectedReportType)
+        {
+            case "terms":
+                await GenerateTermsReport();
+                break;
+            case "courses":
+                await GenerateCoursesReport();
+                break;
+            case "assessments":
+                await GenerateAssessmentsReport();
+                break;
+            case "status":
+                await GenerateCourseStatusReport();
+                break;
+        }
+    }
+
+    private async Task GenerateTermsReport()
+    {
+        var terms = await DbService.GetTermsAsync();
+
+        reportHeaders = new List<string> { "Term ID", "Title", "Start Date", "End Date", "Status", "Course Count" };
+        reportRows = new List<List<string>>();
+
+        foreach (var term in terms)
+        {
+            var courses = await DbService.GetCoursesByTermIdAsync(term.Id);
+            reportRows.Add(new List<string> {
+                term.Id.ToString(),
+                term.Title,
+                term.StartDate.ToString("MM/dd/yyyy"),
+                term.EndDate.ToString("MM/dd/yyyy"),
+                term.Status,
+                courses.Count.ToString()
+            });
+        }
+    }
+
+    private async Task GenerateCoursesReport()
+    {
+        var terms = await DbService.GetTermsAsync();
+
+        reportHeaders = new List<string> { "Term", "Course Title", "Instructor", "Start Date", "End Date", "Status" };
+        reportRows = new List<List<string>>();
+
+        foreach (var term in terms)
+        {
+            var courses = await DbService.GetCoursesByTermIdAsync(term.Id);
+
+            foreach (var course in courses)
+            {
+                reportRows.Add(new List<string> {
+                    term.Title,
+                    course.Title,
+                    course.InstructorName,
+                    course.StartDate.ToString("MM/dd/yyyy"),
+                    course.EndDate.ToString("MM/dd/yyyy"),
+                    course.Status
+                });
+            }
+        }
+    }
+
+    private async Task GenerateAssessmentsReport()
+    {
+        var now = DateTime.Now;
+        var assessments = await DbService.GetAssessmentsAsync();
+        var upcomingAssessments = assessments.Where(a => a.StartDate > now).OrderBy(a => a.StartDate).ToList();
+        var courses = await DbService.GetCoursesAsync();
+
+        reportHeaders = new List<string> { "Assessment Title", "Type", "Due Date", "Course", "Days Until Due" };
+        reportRows = new List<List<string>>();
+
+        foreach (var assessment in upcomingAssessments)
+        {
+            var course = courses.FirstOrDefault(c => c.Id == assessment.CourseId);
+            reportRows.Add(new List<string> {
+                assessment.Title,
+                assessment.Type,
+                assessment.EndDate.ToString("MM/dd/yyyy"),
+                course?.Title ?? "Unknown Course",
+                Math.Max(0, (assessment.EndDate - now).Days).ToString()
+            });
+        }
+    }
+
+    private async Task GenerateCourseStatusReport()
+    {
+        var courses = await DbService.GetCoursesAsync();
+        var now = DateTime.Now;
+
+        reportHeaders = new List<string> { "Status", "Count", "Percentage" };
+        reportRows = new List<List<string>>();
+
+        var statusGroups = courses.GroupBy(c => c.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .OrderByDescending(g => g.Count)
+            .ToList();
+
+        foreach (var group in statusGroups)
+        {
+            var percentage = (double)group.Count / courses.Count * 100;
+            reportRows.Add(new List<string> {
+                group.Status,
+                group.Count.ToString(),
+                $"{percentage:F1}%"
+            });
+        }
+    }
+
+ 
 
     private class Statistics
     {

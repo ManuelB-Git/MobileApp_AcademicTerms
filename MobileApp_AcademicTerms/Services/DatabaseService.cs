@@ -185,6 +185,13 @@ namespace MobileApp_AcademicTerms.Services
             return 1;
         }
 
+        //Get course by termid
+        public async Task<List<Course>> GetCoursesByTermIdAsync(int termId)
+        {
+            var db = await GetDatabaseAsync();
+            return await db.Table<Course>().Where(c => c.TermId == termId).ToListAsync();
+        }
+
         // Assessment operations
         public async Task<List<Assessment>> GetAssessmentsAsync()
         {

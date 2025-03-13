@@ -43,6 +43,16 @@
                 alert("Notes copied to clipboard!");
             }
         }
+
+        function downloadFile(filename, base64Content, contentType) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = `data:${contentType};base64,${base64Content}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
     </script>
 
 
